@@ -1,4 +1,0 @@
-Python 3.10.12 en Linux-6.8.0-149-generic-x86_64-with-glibc2.35
-Semilla: 2026
-Configuración: {'tamanos': [1000, 5000, 20000, 50000], 'repeticiones': 7, 'consultas_op7': 2000, 'ops_op4': 3000}
-CSV: escenario, tamano_v, candidato, repeticiones, promedio_ms, mediana_ms.
