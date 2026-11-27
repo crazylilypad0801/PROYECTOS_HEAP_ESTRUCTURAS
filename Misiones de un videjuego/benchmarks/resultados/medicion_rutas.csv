@@ -1,0 +1,17 @@
+escenario,tamano_v,candidato,repeticiones,promedio_ms,mediana_ms
+Grafo_disperso_ciudad,100,Dijkstra listas + heap,5,2.221,2.179
+Grafo_disperso_ciudad,100,Dijkstra matriz + lineal,5,4.786,4.702
+Grafo_denso_teletransporte,100,Dijkstra listas + heap,5,2.653,2.51
+Grafo_denso_teletransporte,100,Dijkstra matriz + lineal,5,2.4,2.386
+Grafo_disperso_ciudad,250,Dijkstra listas + heap,5,6.454,6.801
+Grafo_disperso_ciudad,250,Dijkstra matriz + lineal,5,30.068,30.864
+Grafo_denso_teletransporte,250,Dijkstra listas + heap,5,14.449,14.669
+Grafo_denso_teletransporte,250,Dijkstra matriz + lineal,5,15.69,15.474
+Grafo_disperso_ciudad,500,Dijkstra listas + heap,5,13.6,13.451
+Grafo_disperso_ciudad,500,Dijkstra matriz + lineal,5,101.795,102.17
+Grafo_denso_teletransporte,500,Dijkstra listas + heap,5,47.223,46.204
+Grafo_denso_teletransporte,500,Dijkstra matriz + lineal,5,38.17,37.615
+Grafo_disperso_ciudad,1000,Dijkstra listas + heap,5,28.963,28.949
+Grafo_disperso_ciudad,1000,Dijkstra matriz + lineal,5,387.553,392.071
+Grafo_denso_teletransporte,1000,Dijkstra listas + heap,5,160.347,163.16
+Grafo_denso_teletransporte,1000,Dijkstra matriz + lineal,5,102.018,99.185
