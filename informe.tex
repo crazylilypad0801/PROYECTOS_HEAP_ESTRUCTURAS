@@ -1,0 +1,329 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{graphicx}
+
+\geometry{margin=2.5cm}
+
+\lstset{
+  language=Python,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue!70!black}\bfseries,
+  commentstyle=\color{green!45!black}\itshape,
+  stringstyle=\color{orange!65!black},
+  breaklines=true,
+  frame=single,
+  showstringspaces=false,
+  extendedchars=true,
+  literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1
+           {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ú}{{\'U}}1
+           {ñ}{{\~n}}1 {Ñ}{{\~N}}1
+}
+
+\title{Proyecto de Estructuras de Datos: Motor de Misiones de un Videojuego}
+\author{
+  Laura Reyes (00336754) \and
+  Amelie Robalino (00) \and
+  Andreinal Rosales (00339560)
+}
+
+\begin{document}
+\maketitle
+
+\section{La app y sus operaciones}
+
+La aplicación diseñada corresponde al motor interno de gestión de misiones para un videojuego de mundo abierto. Su propósito principal es administrar todas las misiones activas e históricas del jugador, decidir de forma eficiente cuál debe atenderse primero y calcular la ruta de menor costo para llegar hasta ella dentro del mapa de la ciudad. El motor lo consume directamente la lógica del juego (por ejemplo, el diario de misiones, el sistema de eventos dinámicos que eleva o reduce la urgencia de un encargo y el navegador de rutas del mapa), sin construir pantallas ni interfaz gráfica.
+
+La prioridad de atención entre misiones pendientes sigue una regla estricta en cascada:
+\begin{enumerate}
+  \item Se atiende primero la misión con mayor \textbf{urgencia} (entero en el rango $[1, 10]$).
+  \item Si hay empate en urgencia, tiene preferencia la misión \textbf{principal} sobre la \textbf{secundaria}.
+  \item Si el empate continúa, se elige la misión que \textbf{llegó antes} (menor orden secuencial de llegada).
+\end{enumerate}
+
+Además de las operaciones auxiliares de construcción del mapa (\texttt{agregar\_ubicacion} y \texttt{agregar\_camino}, que rechazan nombres vacíos, duplicados o pesos negativos), el motor ofrece siete operaciones principales cuyos contratos y casos borde se resumen en la Tabla~\ref{tab:operaciones_contrato}.
+
+\begin{table}[htbp]
+\centering
+\caption{Resumen de las 7 operaciones del motor, sus cambios y casos borde.}
+\label{tab:operaciones_contrato}
+\small
+\begin{tabular}{p{2.7cm} p{2.7cm} p{3.4cm} p{5.2cm}}
+\toprule
+\textbf{Operación y entradas} & \textbf{Qué devuelve} & \textbf{Qué cambia en los datos} & \textbf{Casos borde manejados} \\
+\midrule
+1. \textbf{Registrar misión} (id, nombre, tipo, urgencia, ubicación) & Confirmación (\texttt{exito}, mensaje). & Guarda la misión como \textit{Pendiente} con nuevo \texttt{orden\_llegada} en la tabla hash y en el heap. & Rechaza campos vacíos, urgencia fuera de $[1,10]$, ubicación inexistente en el mapa o ID repetido. \\
+\addlinespace
+2. \textbf{Buscar misión} (id) & \texttt{encontrada}, copia de la misión (con estado) y mensaje. & Nada (solo lectura). & Si el motor está vacío, el ID está vacío o no existe, devuelve \texttt{encontrada = False}. Consulta pendientes, en curso y canceladas. \\
+\addlinespace
+3. \textbf{Cambiar urgencia} (id, nueva\_urgencia) & Confirmación (\texttt{exito}, mensaje). & Actualiza la urgencia en la tabla hash y reubica la misión dentro del heap. & Rechaza urgencia fuera de $[1,10]$, ID inexistente o misión que no esté \textit{Pendiente} (en curso o cancelada). \\
+\addlinespace
+4. \textbf{Cancelar misión} (id) & Confirmación (\texttt{exito}, mensaje). & Cambia su estado a \textit{Cancelada} en la tabla hash (conserva sus datos) y la retira del heap. & Rechaza ID inexistente o misión que ya esté \textit{Cancelada} o \textit{En curso}. \\
+\addlinespace
+5. \textbf{Obtener siguiente misión} () & \texttt{disponible}, misión elegida y mensaje. & Extrae la misión de mayor prioridad del heap y cambia su estado a \textit{En curso} en la tabla hash. & Si el heap está vacío (no hay pendientes), devuelve \texttt{disponible = False} sin alterar los datos. \\
+\addlinespace
+6. \textbf{Consultar primeras $k$} ($k$) & \texttt{exito}, lista ordenada de hasta $k$ misiones pendientes. & Nada (consulta no destructiva sobre el heap). & Rechaza $k < 0$; si $k = 0$ o no hay pendientes devuelve lista vacía; si $k > \text{pendientes}$, devuelve solo las existentes. \\
+\addlinespace
+7. \textbf{Calcular ruta a misión} (origen, id\_mision) & \texttt{existe}, secuencia de lugares, \texttt{costo\_total}. & Nada (solo lectura sobre la tabla hash y el grafo). & Rechaza ID inexistente, misión \textit{Cancelada}, origen inexistente o ausencia de camino; si origen = destino, costo $0$. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Las operaciones con las que cuenta}
+
+Las siete operaciones del motor cumplen con admitir al menos dos candidatos razonables donde ninguno domina de forma absoluta en todos los contextos. La Tabla~\ref{tab:candidatos} presenta los candidatos analizados para cada operación y el escenario en que gana cada uno.
+
+\begin{table}[htbp]
+\centering
+\caption{Candidatos evaluados para las 7 operaciones y cuándo gana cada uno.}
+\label{tab:candidatos}
+\small
+\begin{tabular}{p{2.6cm} p{3.1cm} p{3.1cm} p{5.2cm}}
+\toprule
+\textbf{Operación} & \textbf{Candidato 1} & \textbf{Candidato 2} & \textbf{Cuándo gana cada uno} \\
+\midrule
+1. Registrar misión & Tabla hash + Heap binario indexado & Tabla hash + Árbol AVL por prioridad & El Heap gana cuando predominan altas y cambios de urgencia con $k$ pequeño (constantes menores en arreglo contiguo). El AVL gana si luego habrá consultas por rango o top-$k$ grandes frecuentes. \\
+\addlinespace
+2. Buscar misión por ID & Tabla hash con encadenamiento separado & Árbol AVL ordenado por ID & La tabla hash gana si solo hay búsquedas exactas por ID ($O(1)$ esperado). El AVL gana si también se piden búsquedas por rango de IDs o listados en orden alfabético. \\
+\addlinespace
+3. Cambiar urgencia & Heap indexado (posición en $O(1)$ + flotar/hundir en $O(\log n)$) & Tabla hash sin orden + reconstrucción perezosa (\textit{heapify} $O(n)$) al consultar & El Heap indexado gana cuando los cambios de urgencia se intercalan con consultas de prioridad. La reconstrucción perezosa gana si ocurren ráfagas masivas de cambios sin consultar casi nunca el máximo ($O(1)$ por cambio). \\
+\addlinespace
+4. Cancelar misión & Retiro inmediato del heap indexado ($O(\log n)$) & Borrado perezoso (marcar \textit{Cancelada} y omitir al extraer) & El retiro inmediato gana cuando hay consultas \texttt{top-k} frecuentes o se exige tamaño real del heap sin elementos muertos. El borrado perezoso gana en ráfagas muy altas de cancelación ($O(1)$) con pocas consultas. \\
+\addlinespace
+5. Obtener siguiente misión & Extracción de raíz en Heap binario ($O(\log n)$) & Arreglo mantenido ordenado descendente ($O(1)$ extraer del final, $O(n)$ insertar) & El Heap gana con flujo mixto de inserciones, cambios y extracciones. El arreglo ordenado gana si se carga un lote estático una vez (o en orden) y casi todas las operaciones son extracciones. \\
+\addlinespace
+6. Consultar primeras $k$ misiones & Heap indexado + heap auxiliar ($O(k \log k)$) & Árbol AVL ordenado por prioridad ($O(\log n + k)$) & El Heap gana cuando $k$ es pequeño y dominan las actualizaciones de urgencia. El AVL gana cuando el top-$k$ se pide de forma intensiva con $k$ grande y pocos cambios. \\
+\addlinespace
+7. Calcular ruta a misión & Dijkstra con listas de adyacencia + Min-Heap ($O((V+E)\log V)$) & Dijkstra con matriz de adyacencia + selección lineal ($O(V^2)$) & Listas + heap gana en mapas dispersos de ciudad ($E \ll V^2$). Matriz + lineal gana en grafos muy densos ($E = \Theta(V^2)$) al evitar operaciones repetidas sobre el heap. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Los escenarios}
+
+Se definieron tres escenarios principales derivados de la vida real del videojuego, más un escenario corto de frontera para probar casos extremos:
+
+\begin{enumerate}
+  \item \textbf{Escenario 1 --- Partida estándar en mundo abierto (día normal):} El motor mantiene $n = 20\,000$ misiones sobre un mapa disperso de $V = 500$ ubicaciones y $E \approx 1\,500$ caminos bidireccionales con pesos distintos en $[1, 100]$. La mezcla de trabajo es equilibrada: $30\%$ registros, $25\%$ cambios de urgencia, $15\%$ búsquedas por ID, $10\%$ cancelaciones, $10\%$ obtener siguiente misión, $5\%$ consultas \texttt{top-10} y $5\%$ cálculo de rutas. Las urgencias se distribuyen al azar en $[1, 10]$.
+  \item \textbf{Escenario 2 --- Evento de asedio masivo (actualizaciones intensivas):} Durante un evento de invasión hay $n = 50\,000$ misiones activas sobre un mapa de $V = 250$ lugares ($E \approx 750$). Las prioridades cambian sin cesar según el avance de enemigos: $80\%$ cambios de urgencia al azar, $10\%$ registros/cancelaciones y $10\%$ consultas \texttt{top-10} para el radar rápido del jugador.
+  \item \textbf{Escenario 3 --- Tablero táctico y red densa de teletransporte:} El jugador abre la pantalla de planificación general sobre $n = 50\,000$ misiones estáticas ejecutando $100\%$ de consultas \texttt{top-500} (sin modificaciones), mientras que el mapa posee $V = 1\,000$ puntos conectados mediante portales con densidad $\approx 85\%$ ($E \approx 424\,500$ aristas no dirigidas) para el cálculo de rutas.
+  \item \textbf{Escenario corto de frontera:} Evalúa situaciones límite: motor completamente vacío, ráfagas de cancelación masiva, solicitudes \texttt{top-k} con $k > n$ y $k = 0$, consultas de rutas hacia islas desconectadas del grafo y búsquedas de identificadores inexistentes.
+\end{enumerate}
+
+\section{La comparación}
+
+\subsection{Análisis teórico de los candidatos}
+
+La Tabla~\ref{tab:complejidades_candidatos} compara la complejidad temporal (indicando caso esperado, amortizado o peor), el espacio extra de cada candidato y el ganador teórico en cada escenario.
+
+\begin{table}[htbp]
+\centering
+\caption{Comparación teórica de tiempo, espacio extra y ganador por escenario.}
+\label{tab:complejidades_candidatos}
+\small
+\begin{tabular}{p{2.3cm} p{3.2cm} p{2.9cm} p{2.2cm} p{3.5cm}}
+\toprule
+\textbf{Operación} & \textbf{Candidato} & \textbf{Tiempo (caso)} & \textbf{Espacio extra} & \textbf{Mejor en escenario} \\
+\midrule
+Buscar por ID & Tabla hash (elegida) & $O(1)$ esp. / $O(n)$ peor & $O(n)$ cubetas & Esc. 1, 2 y 3 (solo exactas) \\
+              & Árbol AVL por ID & $O(\log n)$ peor & $O(n)$ punteros & Consultas por rango de ID \\
+\addlinespace
+Cambiar urgencia & Heap indexado (elegido) & $O(\log n)$ esp. / $O(n)$ peor & $O(n)$ posiciones & Esc. 1 y 2 (uso mixto) \\
+                 & Reconstrucción perezosa & $O(1)$ esp. + $O(n)$ consulta & $O(1)$ adicional & Ráfagas puras sin consultas \\
+\addlinespace
+Cancelar misión & Retiro directo (elegido) & $O(\log n)$ esp. / $O(n)$ peor & $O(n)$ posiciones & Esc. 1 y 2 (heap limpio) \\
+                & Borrado perezoso & $O(1)$ esp. al cancelar & $O(n)$ entradas muertas & Cancelación masiva aislada \\
+\addlinespace
+Siguiente misión & Heap indexado (elegido) & $O(\log n)$ esp. / $O(n)$ peor & $O(n)$ arreglo & Esc. 1 y 2 (flujo dinámico) \\
+                 & Arreglo ordenado & $O(1)$ extraer / $O(n)$ insertar & $O(n)$ arreglo & Solo extracciones en lote \\
+\addlinespace
+Primeras $k$ & Heap + aux (elegido) & $O(k \log k)$ peor & $O(k)$ heap aux. & Esc. 1 y 2 ($k$ pequeño) \\
+             & Árbol AVL prioridad & $O(\log n + k)$ peor & $O(n)$ nodos/pila & Esc. 3 ($k$ grande frecuente) \\
+\addlinespace
+Ruta (Dijkstra) & Listas + Heap (elegido) & $O((V+E)\log V)$ peor & $O(V+E)$ & Esc. 1 y 2 (grafo disperso) \\
+                & Matriz + lineal & $O(V^2)$ peor & $O(V^2)$ & Esc. 3 (grafo denso) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Mediciones empíricas de dos operaciones}
+
+Se implementaron y midieron los dos candidatos de la \textbf{Operación 6} (\textit{Consultar primeras $k$ y actualizaciones}) y de la \textbf{Operación 7} (\textit{Calcular ruta a una misión}) en Python 3 sobre la misma computadora, repitiendo 5 veces cada configuración y registrando promedio y mediana en milisegundos (\texttt{ms}) sin contar el tiempo de precarga inicial.
+
+\subsubsection{Medición 1: Heap binario indexado vs. Árbol AVL (Operación 6)}
+
+Se evaluaron cuatro tamaños $n \in \{1\,000,\, 5\,000,\, 20\,000,\, 50\,000\}$ en dos escenarios: Escenario A ($2\,000$ operaciones mixtas con $80\%$ cambios de urgencia, $10\%$ altas/bajas y $10\%$ \texttt{top-10}) y Escenario B ($80$ consultas seguidas \texttt{top-500} sin modificaciones). Los resultados exactos se presentan en la Tabla~\ref{tab:medicion_top_k} y en la Figura~\ref{fig:grafico_top_k}.
+
+\begin{table}[htbp]
+\centering
+\caption{Resultados reales de la Operación 6 (5 repeticiones por punto, en milisegundos).}
+\label{tab:medicion_top_k}
+\small
+\begin{tabular}{l r r r r r}
+\toprule
+\textbf{Escenario} & \textbf{Tamaño $n$} & \textbf{Heap prom. (ms)} & \textbf{Heap med. (ms)} & \textbf{AVL prom. (ms)} & \textbf{AVL med. (ms)} \\
+\midrule
+Esc. A (Actualizaciones + top-10) & 1\,000  & 16.443  & 16.366  & 33.191 & 26.625 \\
+Esc. A (Actualizaciones + top-10) & 5\,000  & 14.541  & 14.399  & 25.400 & 24.828 \\
+Esc. A (Actualizaciones + top-10) & 20\,000 & 28.509  & 28.847  & 61.502 & 61.453 \\
+Esc. A (Actualizaciones + top-10) & 50\,000 & 34.535  & 31.236  & 88.665 & 71.470 \\
+\midrule
+Esc. B (80 consultas top-500)     & 1\,000  & 246.654 & 244.511 & 5.378  & 3.336  \\
+Esc. B (80 consultas top-500)     & 5\,000  & 291.567 & 307.273 & 6.322  & 5.996  \\
+Esc. B (80 consultas top-500)     & 20\,000 & 400.396 & 380.754 & 7.084  & 6.686  \\
+Esc. B (80 consultas top-500)     & 50\,000 & 300.184 & 299.630 & 5.034  & 5.181  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \IfFileExists{grafico_top_k.png}{
+    \includegraphics[width=0.96\textwidth]{grafico_top_k.png}
+  }{
+    \fbox{\parbox{0.92\textwidth}{\centering\vspace{1.2cm}\textbf{[Espacio para insertar el gráfico comparativo de la Operación 6]}\vspace{1.2cm}}}
+  }
+  \caption{Comparación empírica entre Heap binario indexado y Árbol AVL en los dos escenarios.}
+  \label{fig:grafico_top_k}
+\end{figure}
+
+\textbf{¿Confirma o contradice el análisis?} En términos globales \textbf{confirma} el análisis teórico: en el Escenario A el Heap es aproximadamente el doble de rápido en todos los tamaños ($31.236$ ms frente a $71.470$ ms en $n=50\,000$), porque reubicar en un arreglo contiguo evita rotaciones y creación de nodos; en el Escenario B el AVL domina por amplio margen ($5.181$ ms frente a $299.630$ ms en $n=50\,000$), dado que recorrer en orden $k=500$ nodos cuesta $O(\log n + k)$ sin construir un heap auxiliar $O(k \log k)$. Se observa un comportamiento interesante entre $n=1\,000$ y $n=5\,000$ en el Escenario A ($16.366$ ms baja a $14.399$ ms) y en $n=20\,000$ vs. $50\,000$ del Escenario B ($380.754$ ms vs. $299.630$ ms): a escala de pocos milisegundos influyen el recolector de basura de Python, la profundidad efectiva de los empates y las constantes del intérprete, sin alterar qué estructura gana.
+
+\subsubsection{Medición 2: Dijkstra listas+heap vs. matriz+lineal (Operación 7)}
+
+Se midieron cuatro tamaños $V \in \{100,\, 250,\, 500,\, 1\,000\}$ en un grafo disperso ($E \approx 3V$, $10$ consultas) y un grafo denso ($\approx 85\%$ de aristas, $5$ consultas). Los valores exactos aparecen en la Tabla~\ref{tab:medicion_rutas} y la Figura~\ref{fig:grafico_rutas}.
+
+\begin{table}[htbp]
+\centering
+\caption{Resultados reales de la Operación 7 (5 repeticiones por punto, en milisegundos).}
+\label{tab:medicion_rutas}
+\small
+\begin{tabular}{l r r r r r}
+\toprule
+\textbf{Escenario} & \textbf{Vértices $V$} & \textbf{Listas+Heap prom.} & \textbf{Listas+Heap med.} & \textbf{Matriz+Lineal prom.} & \textbf{Matriz+Lineal med.} \\
+\midrule
+Esc. A (Disperso, $E \approx 3V$) & 100    & 2.221   & 2.179   & 4.786   & 4.702   \\
+Esc. A (Disperso, $E \approx 3V$) & 250    & 6.454   & 6.801   & 30.068  & 30.864  \\
+Esc. A (Disperso, $E \approx 3V$) & 500    & 13.600  & 13.451  & 101.795 & 102.170 \\
+Esc. A (Disperso, $E \approx 3V$) & 1\,000 & 28.963  & 28.949  & 387.553 & 392.071 \\
+\midrule
+Esc. B (Denso, 85\% aristas)      & 100    & 2.653   & 2.510   & 2.400   & 2.386   \\
+Esc. B (Denso, 85\% aristas)      & 250    & 14.449  & 14.669  & 15.690  & 15.474  \\
+Esc. B (Denso, 85\% aristas)      & 500    & 47.223  & 46.204  & 38.170  & 37.615  \\
+Esc. B (Denso, 85\% aristas)      & 1\,000 & 160.347 & 163.160 & 102.018 & 99.185  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \IfFileExists{grafico_rutas.png}{
+    \includegraphics[width=0.96\textwidth]{grafico_rutas.png}
+  }{
+    \fbox{\parbox{0.92\textwidth}{\centering\vspace{1.2cm}\textbf{[Espacio para insertar el gráfico comparativo de la Operación 7]}\vspace{1.2cm}}}
+  }
+  \caption{Comparación empírica de Dijkstra con listas+heap frente a matriz+selección lineal.}
+  \label{fig:grafico_rutas}
+\end{figure}
+
+\textbf{¿Confirma o contradice el análisis?} \textbf{Confirma} claramente el modelo asintótico. En el grafo disperso, listas+heap escala casi linealmente con $V \log V$ ($2.179 \rightarrow 28.949$ ms), mientras que la matriz crece cuadráticamente ($4.702 \rightarrow 392.071$ ms, más de $13\times$ más lenta en $V=1\,000$). En el grafo denso ocurre el cruce esperado: alrededor de $V=250$ los dos enfoques prácticamente empatan ($14.669$ ms vs. $15.474$ ms por constantes pequeñas y salida temprana), pero desde $V=500$ y $V=1\,000$ la matriz+lineal supera con claridad a listas+heap ($99.185$ ms frente a $163.160$ ms en $V=1\,000$), reflejando el costo de $O(V^2 \log V)$ frente a $O(V^2)$.
+
+\section{El motor completo}
+
+El motor final integra tres estructuras pertenecientes a tres familias diferentes:
+\begin{enumerate}
+  \item \textbf{Tabla hash (Familia Hashing):} almacena el registro maestro de todas las misiones (\texttt{id -> Mision}), conservando pendientes, en curso y canceladas. También se instancia internamente para el diccionario de posiciones del heap y el traductor de lugares del grafo.
+  \item \textbf{Heap binario indexado (Familia Árboles):} Max-Heap binario que guarda únicamente las misiones con estado \textit{Pendiente}, acompañado de una tabla hash de posiciones (\texttt{id -> índice}) que sincroniza cada intercambio.
+  \item \textbf{Grafo con listas de adyacencia (Familia Grafos):} grafo ponderado que modela los lugares y caminos de la ciudad junto con Dijkstra propio apoyado en un Min-Heap binario.
+\end{enumerate}
+
+Elegir estructuras por separado no basta porque las operaciones comparten datos: al registrar una misión, se actualizan la tabla hash y el heap; al cambiar urgencia, cancelar o extraer la siguiente misión, ambas estructuras deben mantenerse coherentes. Ese costo conjunto se detalla en la Tabla~\ref{tab:resumen_motor}.
+
+\begin{table}[htbp]
+\centering
+\caption{Costo temporal y espacial integrado de cada operación en el motor completo ($n$ misiones totales, $m$ pendientes, $V$ lugares, $E$ caminos).}
+\label{tab:resumen_motor}
+\small
+\begin{tabular}{p{3.9cm} p{4.2cm} p{3.1cm} p{2.8cm}}
+\toprule
+\textbf{Operación} & \textbf{Estructuras que toca} & \textbf{Tiempo (esperado / peor)} & \textbf{Espacio extra} \\
+\midrule
+1. Registrar misión & Grafo, Tabla hash, Heap indexado & $O(\log m)$ esp. / $O(n)$ rehash & $O(1)$ amortizado \\
+2. Buscar misión & Tabla hash & $O(1)$ esp. / $O(n)$ peor & $O(1)$ \\
+3. Cambiar urgencia & Tabla hash, Heap indexado & $O(\log m)$ esp. / $O(n)$ peor & $O(1)$ \\
+4. Cancelar misión & Tabla hash, Heap indexado & $O(\log m)$ esp. / $O(n)$ peor & $O(1)$ \\
+5. Obtener siguiente misión & Heap indexado, Tabla hash & $O(\log m)$ esp. / $O(n)$ peor & $O(1)$ \\
+6. Consultar primeras $k$ & Heap indexado (heap auxiliar) & $O(k \log k)$ peor & $O(k)$ \\
+7. Calcular ruta a misión & Tabla hash, Grafo (Dijkstra) & $O((V+E)\log V)$ peor & $O(V)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{¿Qué decisión cambiaría en otro escenario?} Si la aplicación operara principalmente bajo el \textbf{Escenario 3} (consultas \texttt{top-500} constantes sobre misiones casi estáticas y un grafo denso de teletransporte), sustituiríamos el heap indexado por un \textbf{Árbol AVL ordenado por prioridad} (ganando $O(\log m + k)$ en \texttt{top-k} a costa de rotaciones en actualizaciones poco frecuentes) y cambiaríamos las listas de adyacencia del grafo por una \textbf{matriz de adyacencia} con Dijkstra lineal $O(V^2)$.
+
+\section{La implementación}
+
+El motor fue implementado en \textbf{Python 3} de forma modular, escribiendo desde cero las tres estructuras de datos principales (\texttt{TablaHash}, \texttt{HeapMisiones} y \texttt{GrafoCiudad}), sin depender de \texttt{dict}, \texttt{heapq} ni librerías externas de grafos en el núcleo del sistema.
+
+\subsection{Invariantes de las estructuras propias}
+\begin{itemize}
+  \item \textbf{Tabla hash:} la longitud de las cubetas coincide con la capacidad reservada, el factor de carga se mantiene $\le 0.75$ mediante redimensionamiento dinámico (\textit{rehash}), la suma de elementos en cubetas equivale al tamaño lógico, cada clave reside exactamente en la cubeta dictada por la función hash FNV-1a y no existen claves duplicadas.
+  \item \textbf{Heap binario indexado:} la tabla interna de posiciones cumple su invariante, su tamaño es idéntico al arreglo del heap, todo índice $i$ satisface \texttt{posiciones[datos[i].id] == i}, y para todo $i > 0$ el padre $\lfloor(i-1)/2\rfloor$ tiene mayor prioridad que el hijo $i$.
+  \item \textbf{Grafo de la ciudad:} existe biyección exacta entre nombres de ubicación e índices $[0, V-1]$, toda arista apunta a un índice válido y ningún peso es negativo.
+  \item \textbf{Invariante global del motor:} las misiones con estado \textit{Pendiente} en la tabla hash maestra coinciden exactamente con el contenido del heap de prioridad.
+\end{itemize}
+
+\subsection{Fragmentos clave de la lógica implementada}
+
+\begin{lstlisting}[caption={Regla de desempate y actualizaci\'on de urgencia en el m\'odulo de prioridades.}]
+def tiene_mayor_prioridad(a: Mision, b: Mision) -> bool:
+    if a.urgencia != b.urgencia:
+        return a.urgencia > b.urgencia
+    if a.tipo != b.tipo:
+        return a.tipo.value > b.tipo.value
+    return a.orden_llegada < b.orden_llegada
+
+def actualizar_urgencia(self, id_mision: str, nueva_urgencia: int) -> bool:
+    idx = self._posiciones.obtener(id_mision)
+    if idx is None:
+        return False
+    urgencia_anterior = self._datos[idx].urgencia
+    self._datos[idx].urgencia = nueva_urgencia
+    if nueva_urgencia > urgencia_anterior:
+        self._subir(idx)
+    elif nueva_urgencia < urgencia_anterior:
+        self._bajar(idx)
+    return True
+\end{lstlisting}
+
+\begin{lstlisting}[caption={N\'ucleo del algoritmo de Dijkstra con Min-Heap binario propio.}]
+while not cola.vacio():
+    dist_actual, u = cola.extraer_minimo()
+    if dist_actual > dist[u]:
+        continue
+    if u == idx_destino:
+        break
+    for v, peso in self._adyacencia[u]:
+        nueva_dist = dist_actual + peso
+        if nueva_dist < dist[v]:
+            dist[v] = nueva_dist
+            padre[v] = u
+            cola.insertar(nueva_dist, v)
+\end{lstlisting}
+
+\subsection{Pruebas realizadas}
+En la batería de validación automatizada se verificaron: (1) inserciones, múltiples \textit{rehash}, sobrescritura y eliminaciones en la tabla hash; (2) todos los casos borde de las 7 operaciones (motor vacío, IDs repetidos, urgencias $0$ y $11$, cancelación conservando datos, $k < 0$, $k = 0$, $k > m$, origen igual a destino e islas desconectadas); y (3) una \textbf{comparación diferencial de $12\,000$ operaciones aleatorias} (incluyendo IDs inexistentes) frente a una implementación lineal de referencia (\texttt{MotorMisionesLento}), obteniendo $0$ discrepancias y manteniendo todos los invariantes intactos.
+
+\subsection{Qué no demuestran las pruebas ni las mediciones}
+Las pruebas diferenciales de $12\,000$ operaciones demuestran consistencia funcional frente al modelo de referencia para las distribuciones probadas, pero no constituyen una prueba formal de corrección para cualquier grafo posible ni cubren concurrencia multihilo o persistencia en disco. Asimismo, las mediciones fueron ejecutadas en un único computador e intérprete Python 3, por lo que sus constantes de tiempo y la recolección de basura son propias de ese entorno y no garantizan tiempos absolutos idénticos en otros lenguajes compilados ni bajo presión extrema de memoria.
+
+\subsection{Bibliotecas, herramientas y apoyos utilizados}
+En la implementación del motor se utilizó únicamente la biblioteca estándar de Python (\texttt{dataclasses}, \texttt{enum}, \texttt{typing}, \texttt{random}, \texttt{time}, \texttt{csv}, \texttt{statistics}). Para generar los gráficos comparativos de las mediciones se utilizó \texttt{matplotlib}. Como respaldo teórico se emplearon los apuntes y lineamientos de la asignatura Estructuras de Datos.
+
+\end{document}

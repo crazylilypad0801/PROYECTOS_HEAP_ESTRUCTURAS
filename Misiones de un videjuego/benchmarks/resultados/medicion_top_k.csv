@@ -1,0 +1,17 @@
+escenario,tamano_n,candidato,repeticiones,promedio_ms,mediana_ms
+Actualizaciones_intensivas_k_pequeno,1000,Heap binario indexado,5,16.443,16.366
+Actualizaciones_intensivas_k_pequeno,1000,Arbol AVL ordenado,5,33.191,26.625
+Consultas_top_k_intensivas_k_grande,1000,Heap binario indexado,5,246.654,244.511
+Consultas_top_k_intensivas_k_grande,1000,Arbol AVL ordenado,5,5.378,3.336
+Actualizaciones_intensivas_k_pequeno,5000,Heap binario indexado,5,14.541,14.399
+Actualizaciones_intensivas_k_pequeno,5000,Arbol AVL ordenado,5,25.4,24.828
+Consultas_top_k_intensivas_k_grande,5000,Heap binario indexado,5,291.567,307.273
+Consultas_top_k_intensivas_k_grande,5000,Arbol AVL ordenado,5,6.322,5.996
+Actualizaciones_intensivas_k_pequeno,20000,Heap binario indexado,5,28.509,28.847
+Actualizaciones_intensivas_k_pequeno,20000,Arbol AVL ordenado,5,61.502,61.453
+Consultas_top_k_intensivas_k_grande,20000,Heap binario indexado,5,400.396,380.754
+Consultas_top_k_intensivas_k_grande,20000,Arbol AVL ordenado,5,7.084,6.686
+Actualizaciones_intensivas_k_pequeno,50000,Heap binario indexado,5,34.535,31.236
+Actualizaciones_intensivas_k_pequeno,50000,Arbol AVL ordenado,5,88.665,71.47
+Consultas_top_k_intensivas_k_grande,50000,Heap binario indexado,5,300.184,299.63
+Consultas_top_k_intensivas_k_grande,50000,Arbol AVL ordenado,5,5.034,5.181
